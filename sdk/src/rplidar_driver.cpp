@@ -1009,6 +1009,28 @@ u_result RPlidarDriverSerialImpl::startMotor()
     }
 }
 
+u_result RPlidarDriverSerialImpl::startMotor(_u16 pwm)
+{
+    if (_isSupportingMotorCtrl) { // RPLIDAR A2
+    	if ( pwm > MAX_MOTOR_PWM )
+    	{
+    		setMotorPWM(pwm);
+    	}
+    	else
+    	{
+    		setMotorPWM(pwm);
+    	}
+
+        delay(500);
+        return RESULT_OK;
+    } else { // RPLIDAR A1
+        rp::hal::AutoLocker l(_lock);
+        _rxtx->clearDTR();
+        delay(500);
+        return RESULT_OK;
+    }
+}
+
 u_result RPlidarDriverSerialImpl::stopMotor()
 {
     if (_isSupportingMotorCtrl) { // RPLIDAR A2

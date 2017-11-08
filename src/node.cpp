@@ -37,6 +37,15 @@
 #include "std_srvs/Empty.h"
 #include "rplidar.h"
 
+// 2017-11-08 by Yaoyu Hu.
+// === Newly added ROS Service header files. ===
+
+#include "rplidar_ros/StartScanWithPWM.h"
+#include "rplidar_ros/RestartScanWithPWM.h"
+#include "rplidar_ros/RestartScanWithNPWM.h"
+
+// === End of newly added ROS srv header files. ===
+
 #ifndef _countof
 #define _countof(_Array) (int)(sizeof(_Array) / sizeof(_Array[0]))
 #endif
@@ -180,6 +189,119 @@ bool start_motor(std_srvs::Empty::Request &req,
   return true;
 }
 
+/**
+ * Start the RPLIDAR A2 model with specific PWM duty cycle.
+ *
+ * Created by Yaoyu Hu <huyaoyu@sjtu.edu.cn> at 2017-11-08.
+ */
+bool func_start_scan_with_PWM(uint16_t pwm)
+{
+	// Check the validity of pwm.
+	if ( pwm > MAX_MOTOR_PWM || pwm < 0)
+	{
+		ROS_ERROR("Service StartScanWithPWM: Wrong pwm argument. pwm = %d. Valid range is [%d, %d]",
+				pwm, DEFAULT_MOTOR_PWM, MAX_MOTOR_PWM);
+		return false;
+	}
+	else
+	{
+		// Show information for temporary debugging.
+		ROS_INFO("Service startScanWithPWM: Starts motor at %d PWM DC. Starts scanning.", pwm);
+	}
+
+	// Fire up the system.
+	drv->startMotor(pwm);
+	drv->startScan();
+
+	return true;
+}
+
+/**
+ * Starts RPLIDAR's motor with specific PWM duty cycle. Starts scanning after the motor starts.
+ *
+ * Created by Yaoyu Hu <huyaoyu@sjtu.edu.cn> at 2017-11-08.
+ */
+bool start_scan_with_PWM(rplidar_ros::StartScanWithPWM::Request &req,
+		                 rplidar_ros::StartScanWithPWM::Response &res)
+{
+	// Check if drv is valid.
+	if ( !drv )
+	{
+		return false;
+	}
+
+	// Valid drv.
+	ROS_DEBUG("Start scan with specific pwm.");
+
+	return func_start_scan_with_PWM(req.pwm);
+}
+
+/**
+ * Stops the system. Then Starts RPLIDAR's motor with specific PWM duty cycle. Starts scanning after the motor starts.
+ *
+ * Created by Yaoyu Hu <huyaoyu@sjtu.edu.cn> at 2017-11-08.
+ */
+bool restart_scan_with_PWM(rplidar_ros::RestartScanWithPWM::Request &req,
+		                   rplidar_ros::RestartScanWithPWM::Response &res)
+{
+	// Check if drv is valid.
+	if(!drv)
+	       return false;
+
+	ROS_DEBUG("Stop motor");
+
+	drv->stop();
+	drv->stopMotor();
+
+	ros::Rate tempDelay(1.0/req.dly);
+
+	//Delay for a period of time.
+
+	tempDelay.sleep();
+
+	ROS_DEBUG("Start scan with specific pwm.");
+
+	return func_start_scan_with_PWM(req.pwm);
+}
+
+/**
+ * Stops the system. Then Starts RPLIDAR's motor with specific PWM duty cycle.
+ * Starts scanning after the motor starts. The pwm is specified by a normalized argument.
+ *
+ * Created by Yaoyu Hu <huyaoyu@sjtu.edu.cn> at 2017-11-08.
+ */
+bool restart_scan_with_NPWM(rplidar_ros::RestartScanWithNPWM::Request &req,
+		                   rplidar_ros::RestartScanWithNPWM::Response &res)
+{
+	// Check if drv is valid.
+	if(!drv)
+	       return false;
+
+	ROS_DEBUG("Stop motor");
+
+	drv->stop();
+	drv->stopMotor();
+
+	ros::Rate tempDelay(1.0/req.dly);
+
+	//Delay for a period of time.
+
+	tempDelay.sleep();
+
+	ROS_DEBUG("Start scan with specific pwm.");
+
+	if ( req.npwm > 1.0 || req.npwm < 0.0 )
+	{
+		ROS_ERROR("restart_scan_with_NPWM: Wrong npwm value. npwm = %f. Valid range is [%f, %f].",
+				req.npwm, 0.1, 1.0);
+		return false;
+	}
+
+	double pwm = req.npwm * MAX_MOTOR_PWM;
+
+	return func_start_scan_with_PWM(pwm);
+}
+
 int main(int argc, char * argv[]) {
     ros::init(argc, argv, "rplidar_node");
 
@@ -233,7 +355,16 @@ int main(int argc, char * argv[]) {
     ros::ServiceServer stop_motor_service = nh.advertiseService("stop_motor", stop_motor);
     ros::ServiceServer start_motor_service = nh.advertiseService("start_motor", start_motor);
 
-    drv->startMotor();
+    // 2017-11-08
+    // Advertise the newly added service.
+    ros::ServiceServer start_scan_with_PWM_service =
+    		nh.advertiseService("start_scan_with_PWM",    start_scan_with_PWM);
+    ros::ServiceServer restart_scan_with_PWM_service =
+    		nh.advertiseService("restart_scan_with_PWM",  restart_scan_with_PWM);
+    ros::ServiceServer restart_scan_with_NPWM_service =
+			nh.advertiseService("restart_scan_with_NPWM", restart_scan_with_NPWM);
+
+    drv->startMotor( DEFAULT_MOTOR_PWM );
     drv->startScan();
 
     ros::Time start_scan_time;
@@ -306,6 +437,10 @@ int main(int argc, char * argv[]) {
                              frame_id);
             }
         }
+        else
+		{
+			ROS_WARN("RPLIDAR returns %x", op_result);
+		}
 
         ros::spinOnce();
     }
